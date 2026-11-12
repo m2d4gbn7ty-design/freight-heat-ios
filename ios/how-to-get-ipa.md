@@ -36,15 +36,16 @@ C:\Users\85826\WorkBuddy\2026-11-11-00-47-51\货运老司机工具
 > 它已经是 Git 仓库，不会提示创建，直接显示 418 个待提交文件。
 > 如果它要求先登录，用你的 GitHub 账号登录一次；如果要求 Configure Git，随便填你的名字和邮箱。
 
-### 2. 提交
+### 2. 提交（已经做好了，可跳过）
 
-左下角 **Summary** 填一句：
+本机仓库里已经有一次提交：
 
 ```
-iOS 版 + 云端编译 ipa 流程
+1c8133d  iOS 版：PWA + WKWebView 壳 + 云端编译 ipa 流程
 ```
 
-点 **Commit to main**。
+419 个文件，`.gitattributes` 已锁定 LF。如果你在 GitHub Desktop 里还看到零散改动，
+顺手 Commit 一下；没有就直接下一步。
 
 ### 3. 发布到 GitHub
 
