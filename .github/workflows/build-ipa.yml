@@ -27,10 +27,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: ipa-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   # 先判断仓库里到底有没有源码。没有就安静跳过，
   # 避免「刚建仓库还没传文件」时跑出一个红叉吓人。
