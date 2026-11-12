@@ -1,0 +1,23 @@
+# 统一换行符：文本一律 LF，二进制不做任何转换
+# 否则 Windows 上的 CRLF 会让 macOS 编译时读到的 index.html 与本地不一致
+* text=auto eol=lf
+
+*.swift   text eol=lf
+*.md      text eol=lf
+*.yml     text eol=lf
+*.yaml    text eol=lf
+*.json    text eol=lf
+*.html    text eol=lf
+*.css     text eol=lf
+*.js      text eol=lf
+*.sh      text eol=lf
+*.webmanifest text eol=lf
+*.plist   text eol=lf
+
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.woff2   binary
+*.zip     binary
+*.ipa     binary
+*.apk     binary

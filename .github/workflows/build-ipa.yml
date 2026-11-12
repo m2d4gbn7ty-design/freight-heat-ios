@@ -1,0 +1,177 @@
+# =============================================================================
+# 在 GitHub 的 macOS 机器上编译出真正的 .ipa
+# -----------------------------------------------------------------------------
+# 为什么必须放云端：.ipa = 编译好的 .app（ARM64 机器码）+ Payload 目录。
+# Swift 只能在 macOS + Xcode 下编译成 ARM64，Windows 没有替代方案。
+# GitHub Actions 免费提供 macOS 机器，这条流程就是替你做编译。
+#
+# 两种用法（任选其一）：
+#   1) 只上传 ios-source.zip：流程自己解压 → 编译 → 出 ipa（最省事）
+#   2) 直接放好 ios/ 源码目录：流程跳过解压，直接编译（便于后续改代码）
+#
+# 产物是「未签名 ipa」：Apple 不允许未签名 App 直接安装，需用 Sideloadly /
+# AltStore 用自己的 Apple ID 自签一次再装。详见 ios/how-to-get-ipa.md。
+# =============================================================================
+
+name: Build unsigned IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    paths:
+      - 'ios/**'
+      - 'ios-source.zip'
+      - '.github/workflows/build-ipa.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # 先判断仓库里到底有没有源码。没有就安静跳过，
+  # 避免「刚建仓库还没传文件」时跑出一个红叉吓人。
+  detect:
+    name: 检查源码
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      has_source: ${{ steps.check.outputs.ok }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        run: |
+          if [ -f "ios/FreightHeat/project.yml" ] || [ -f "ios-source.zip" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+            echo "发现源码，继续构建"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::仓库里还没有 iOS 源码（ios/ 或 ios-source.zip），本次跳过。上传 ios-source.zip 后会自动重跑。"
+          fi
+
+  build-ipa:
+    name: xcodebuild archive -> ipa
+    needs: detect
+    if: needs.detect.outputs.has_source == 'true'
+    runs-on: macos-14
+    timeout-minutes: 40
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 恢复源码（仓库里只有 zip 时自动解压）
+        run: |
+          set -euo pipefail
+          if [ -f "ios/FreightHeat/project.yml" ]; then
+            echo "仓库内已有 ios/ 源码，跳过解压"
+          elif [ -f "ios-source.zip" ]; then
+            echo "解压 ios-source.zip"
+            unzip -q -o ios-source.zip
+          else
+            echo "::error::既没有 ios/FreightHeat/project.yml，也没有 ios-source.zip"
+            exit 1
+          fi
+
+          # 关键断言：网页资源必须齐全，否则装上去是白屏
+          test -f ios/FreightHeat/project.yml
+          test -f ios/www/index.html
+          test -f ios/FreightHeat/Info.plist
+          echo "--- ios/ 目录 ---"
+          ls -la ios | head -20
+          echo "--- 资源计数 ---"
+          echo "geo json: $(ls ios/www/geo/*.json | wc -l)"
+          echo "www 大小: $(du -sh ios/www | cut -f1)"
+
+      - name: 打印工具链版本
+        run: |
+          xcodebuild -version
+          sw_vers
+          echo "iOS SDK: $(xcrun --sdk iphoneos --show-sdk-version)"
+
+      - name: 安装 XcodeGen
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          xcodegen --version
+
+      - name: 由 project.yml 生成 Xcode 工程
+        working-directory: ios/FreightHeat
+        run: |
+          set -euo pipefail
+          xcodegen generate
+          echo '--- 生成的工程与 scheme ---'
+          xcodebuild -list -project FreightHeat.xcodeproj
+
+      - name: 归档（不签名）
+        working-directory: ios/FreightHeat
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project FreightHeat.xcodeproj \
+            -scheme FreightHeat \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/FreightHeat.xcarchive" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee "$RUNNER_TEMP/archive.log" | tail -n 250
+
+      - name: 打包成 Payload/*.ipa
+        run: |
+          set -euo pipefail
+
+          APP_DIR="$RUNNER_TEMP/FreightHeat.xcarchive/Products/Applications"
+          APP="$(find "$APP_DIR" -maxdepth 1 -name '*.app' | head -1)"
+
+          echo "APP=$APP"
+          if [ -z "$APP" ] || [ ! -d "$APP" ]; then
+            echo "::error::归档里没有找到 .app，看上面 xcodebuild 日志"
+            exit 1
+          fi
+
+          # 网页资源必须以 folder reference 整体进 Bundle，否则 App 白屏而编译不报错
+          if [ ! -f "$APP/www/index.html" ]; then
+            echo "::error::Bundle 内缺少 www/index.html，project.yml 的 folder reference 没生效"
+            find "$APP" -maxdepth 2 -type d | head -40
+            exit 1
+          fi
+
+          SHORT_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Info.plist")"
+          BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")"
+          DISPLAY_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP/Info.plist")"
+          echo "版本: $SHORT_VERSION | $BUNDLE_ID | $DISPLAY_NAME"
+
+          rm -rf "$RUNNER_TEMP/Payload"
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/Payload/"
+
+          cd "$RUNNER_TEMP"
+          /usr/bin/zip -qry "FreightHeat-${SHORT_VERSION}-unsigned.ipa" Payload
+
+          ls -lh "$RUNNER_TEMP"/*.ipa
+          echo "### ipa 已生成：FreightHeat-${SHORT_VERSION}-unsigned.ipa" >> "$GITHUB_STEP_SUMMARY"
+          echo "大小：$(du -h "$RUNNER_TEMP"/*.ipa | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 上传 ipa
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FreightHeat-ipa
+          path: ${{ runner.temp }}/*.ipa
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: 上传构建日志（失败时排查用）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: ${{ runner.temp }}/archive.log
+          if-no-files-found: warn
+          retention-days: 14

@@ -1,0 +1,181 @@
+/* ============================================================================
+ * 运价热力看板 · iOS / PWA 增强层
+ * ----------------------------------------------------------------------------
+ * 这一层只做「iOS 适配」，不碰任何页面结构、不改业务逻辑。
+ * 由 ios/build_www.sh 复制到 ios/www/ios.css，并在 index.html 的 </head> 前
+ * 以 <link> 方式引入（位于原始内联 <style> 之后，所以同优先级规则会覆盖原样式）。
+ *
+ * 覆盖范围：
+ *   1. 系统字体（San Francisco / 苹方）优先，避免回落到非 iOS 字体
+ *   2. 视口高度 100dvh 兜底（Safari 带工具栏 / 独立窗口都成立）
+ *   3. 安全区：status bar（顶部）与 home indicator（底部），env() 与
+ *      Swift 侧注入的 --ios-safe-* 变量取较大值，双保险
+ *   4. 触屏：禁用长按菜单 / 双击缩放 / 点击高亮 / 图片拖拽
+ *   5. 底部推拉面板：把手高度把安全区算进去，peek 档位不压 home indicator
+ * ========================================================================= */
+
+/* 安全区变量（只声明在 :root 上，Swift 侧用内联样式覆写即可全局生效） */
+:root {
+  --ios-safe-top: env(safe-area-inset-top, 0px);
+  --ios-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --ios-safe-left: env(safe-area-inset-left, 0px);
+  --ios-safe-right: env(safe-area-inset-right, 0px);
+}
+
+/* ---------- 1. 字体与基础渲染 ---------- */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* iOS 的整页橡皮筋会抢走面板的纵向拖拽，这里直接关掉整页滚动 */
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    "PingFang SC", "Hiragino Sans GB", "Helvetica Neue", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* 独立窗口下 body 高度要顶满一屏，同时保证 Safari 标签页模式不溢出 */
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/* 100dvh 兜底：iOS 15.4+ 支持 dvh，老系统仍然走 height:100% */
+@supports (height: 100dvh) {
+  html,
+  body {
+    height: 100dvh;
+  }
+}
+
+/* ---------- 2. 触屏手势收敛 ---------- */
+/* 页面自己实现「长按下钻 / 拖拽面板」，系统长按菜单必须让位 */
+* {
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+img,
+svg,
+canvas {
+  -webkit-user-drag: none;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+/* 双击缩放：把可点控件的双击判定交回页面（iOS 的 300ms 双击缩放会吃掉手势） */
+button,
+select,
+input,
+.dd-trigger,
+.dd-opt,
+#side h3,
+#sheetGrip,
+.fx-chips button {
+  touch-action: manipulation;
+}
+
+/* 输入框聚焦时 iOS 不允许 <16px 字号，否则自动放大整页；
+   原始样式在手机上已放大到 16px，这里再兜一次底（只作用于录入面板）。 */
+@media (max-width: 900px) {
+  #editor input[type="number"],
+  #editor input[type="text"],
+  #editor textarea {
+    font-size: 16px;
+    line-height: 1.4;
+  }
+}
+
+/* ---------- 3. 安全区：顶部（刘海 / 灵动岛 / 状态栏） ---------- */
+@media (max-width: 900px) {
+  header {
+    padding-top: calc(8px + max(var(--ios-safe-top), env(safe-area-inset-top, 0px)));
+  }
+
+  #zoomCtl {
+    top: calc(8px + max(var(--ios-safe-top), env(safe-area-inset-top, 0px)));
+  }
+
+  #backBtn {
+    top: calc(40px + max(var(--ios-safe-top), env(safe-area-inset-top, 0px)));
+  }
+
+  #toast {
+    top: calc(10px + max(var(--ios-safe-top), env(safe-area-inset-top, 0px)));
+  }
+}
+
+/* ---------- 4. 安全区：底部（home indicator） ---------- */
+@media (max-width: 900px) {
+  /* 展开档：底部按钮条要抬到手势条之上 */
+  #side {
+    padding-bottom: max(var(--ios-safe-bottom), env(safe-area-inset-bottom, 0px));
+  }
+
+  /* peek 档位只露出「把手 + 标题」两行，标题行必须自带安全区内边距，
+     否则标题正好压在 home indicator 上。原始 JS 的 PEEK 是用
+     grip.offsetHeight + h3.offsetHeight 现算的，所以这里加高标题行
+     等价于自动抬高 peek 档位，不需要改任何脚本。 */
+  #side h3 {
+    padding-bottom: calc(10px + max(var(--ios-safe-bottom), env(safe-area-inset-bottom, 0px)));
+  }
+
+  /* 录入面板浮在面板上沿，同样要让开手势条 */
+  #editor {
+    bottom: calc(var(--sheet-peek, 56px) + 10px + max(var(--ios-safe-bottom), env(safe-area-inset-bottom, 0px))) !important;
+  }
+
+  /* 设置面板（底部抽屉）内部留白 */
+  #fxPanel {
+    padding-bottom: calc(16px + max(var(--ios-safe-bottom), env(safe-area-inset-bottom, 0px)));
+  }
+}
+
+/* 横屏时左右安全区（iPhone 侧边圆角） */
+@media (max-width: 900px) and (orientation: landscape) {
+  header {
+    padding-left: calc(9px + var(--ios-safe-left));
+    padding-right: calc(9px + var(--ios-safe-right));
+  }
+
+  #crumb {
+    left: calc(10px + var(--ios-safe-left));
+  }
+}
+
+/* ---------- 5. 玻璃层在 iOS WebKit 上的稳定性 ----------
+ * iOS 的 backdrop-filter 叠在 will-change:transform 的元素上时，
+ * 拖拽期间会短暂丢失背景采样（表现为面板闪灰）。面板拖动阶段本来就
+ * 不需要模糊，直接关掉，松手后由原样式恢复。 */
+@media (max-width: 900px) {
+  body.sheet-drag #side,
+  #side.dragging,
+  body.sheet-settle #side {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* ---------- 6. 独立窗口（添加到主屏幕）专属微调 ---------- */
+@media (display-mode: standalone) {
+  /* 独立窗口没有浏览器工具栏，顶栏下沿的高光可以更收敛一点 */
+  html {
+    background: #071426;
+  }
+
+  /* 选中文字在独立窗口里会留下难看的系统高亮，页面本身不需要文本选择 */
+  body {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
+/* 尊重系统「减少动态效果」：面板吸附不再做 340ms 缓动 */
+@media (prefers-reduced-motion: reduce) {
+  #side,
+  #mapwrap {
+    transition: none !important;
+  }
+}

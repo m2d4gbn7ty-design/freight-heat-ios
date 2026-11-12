@@ -1,0 +1,30 @@
+# ===== 安装包 / 构建产物：不入库 =====
+*.apk
+*.ipa
+*.zip
+*.xcarchive
+*.dSYM.zip
+
+# ===== iOS 云端编译只需要 ios/ 和 .github/ =====
+# Android 源与构建中间产物（ios/www 已是构建好的产物，编译 ipa 不需要重新生成）
+android/
+android/build/
+android/.gradle/
+android/app/build/
+android/local.properties
+
+# 本地静态服务与历史预览截图（体积大，且不是源码）
+server/
+preview/
+
+# QA 测试依赖（含 node_modules，几十兆；测试脚本可随时重跑生成）
+ios/qa-tools/
+
+# 早期单文件原型
+基础版原型.html
+
+# ===== 依赖与系统杂项 =====
+node_modules/
+.DS_Store
+Thumbs.db
+*.log

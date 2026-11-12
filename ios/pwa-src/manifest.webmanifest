@@ -1,0 +1,37 @@
+{
+  "id": "freight-heat-ios",
+  "name": "运价热力看板",
+  "short_name": "运价热力",
+  "description": "货运线路运价热力看板：按省 / 地市 / 区县下钻，数据只存在本机。",
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#071426",
+  "theme_color": "#071426",
+  "categories": ["business", "productivity", "navigation"],
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
