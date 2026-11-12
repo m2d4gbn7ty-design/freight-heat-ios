@@ -52,7 +52,7 @@ jobs:
     name: xcodebuild archive -> ipa
     needs: detect
     if: needs.detect.outputs.has_source == 'true'
-    runs-on: macos-14
+    runs-on: macos-latest
     timeout-minutes: 40
 
     steps:
